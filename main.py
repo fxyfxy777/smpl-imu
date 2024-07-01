@@ -69,10 +69,10 @@ def xyz_exchange(array):
     return array
 
 def updateAngles(angles, calibration_quaternions ):
-    abs_matrix = np.abs(angles)  # 取绝对值
-    if np.any(abs_matrix > 1):
-        print(f"Invalid quaternion: {angles} 大于 1")
-        return 0
+    # abs_matrix = np.abs(np.array(angles))  # 取绝对值
+    # if np.any(abs_matrix > 1):
+    #     print(f"Invalid quaternion: {angles} 大于 1")
+    #     return 0
 
     # print("angles, calibration_quaternions: ",angles, calibration_quaternions )
     calibrated_angles = []
@@ -113,9 +113,11 @@ def updateAngles(angles, calibration_quaternions ):
     lowerLegL_rel = multiplyQuaternion(upperLegL_inv, lowerLegL_out) * np.array([1, -1, -1, 1])
 
     angles = {}
+
         
-    angles['RSHOULDER'] = quaternion_to_rotation_matrix(xyz_exchange(upperarmR_out))
-    angles['RELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmR_rel) * np.array([1, -1, 1, -1]) ) 
+    angles['RSHOULDER'] = quaternion_to_rotation_matrix(xyz_exchange(upperarmR_out * np.array([1, -1, -1, 1])))
+    angles['RELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmR_rel * np.array([1, -1, -1, 1])) ) 
+    # angles['RELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmR_rel ) ) 
     angles['LSHOULDER'] = quaternion_to_rotation_matrix(xyz_exchange(upperarmL_out))
     angles['LELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmL_rel))
 
@@ -131,12 +133,12 @@ def updateAngles(angles, calibration_quaternions ):
 
 class SMPL_display():
     def __init__(self) -> None:
-        self.model = art.ParametricModel("smpl_model/basicModel_f_lbs_10_207_0_v1.0.0.pkl")
+        self.model = art.ParametricModel("smpl_model/basicmodel_m_lbs_10_207_0_v1.0.0.pkl")
         FPS = 60
         print("请输入port:")
         port = input()
         if not port:
-            port = 'COM9'  # 指定串口号，根据实际情况修改
+            port = 'COM6'  # 指定串口号，根据实际情况修改
         baudrate = 256000  # 波特率，根据实际情况修改
         print("请输入port_wit:")
         port_wit = input()
@@ -172,22 +174,26 @@ class SMPL_display():
         while 1:
             rotation_matrix_seq = np.eye(3).reshape(1, 1, 3, 3).repeat(500, axis=0).repeat(24, axis=1)
             for i in range(500):
-                angles = self.uart_table.get("angles")
+                angles_uart = self.uart_table.get("angles")
                 calibration_quaternions = self.uart_table.get("calibration_quaternions")
-                if angles and len(angles)== 10  and len(calibration_quaternions) == 10 :
-                    angles_update = updateAngles(angles, calibration_quaternions)
+                if angles_uart and len(angles_uart)== 10  and len(calibration_quaternions) == 10 :
+                    angles_update = updateAngles(angles_uart, calibration_quaternions)
                     if angles_update != 0:
-                        angles = angles_update
-                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                            self.joint_map[joint] = angles[joint]
-                    else:
-                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                            self.joint_map[joint] = angles[joint]
-
+                        angles_temp = angles_update
+                        for joint, quat in zip(self.joints_to_assign, angles_temp):#赋值10个需要更改的关节
+                            self.joint_map[joint] = angles_temp[joint]
                         joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
                         for idx, joint in enumerate(self.joint_map):
                             joint_matrices[idx] = self.joint_map[joint][0]
                         rotation_matrix_seq[i] = joint_matrices
+                    else:
+                        if not i:
+                            pass
+                        else:
+                            rotation_matrix_seq[i] = rotation_matrix_seq[i-1]
+                        continue
+                        # for joint, quat in zip(self.joints_to_assign, angles_temp):#赋值10个需要更改的关节
+                        #     self.joint_map[joint] = angles_temp[joint]
                 else:
                     time.sleep(1)
                     print("初始化中...")
@@ -205,24 +211,24 @@ class SMPL_display():
        
         while 1:
             try:
-                angles = self.uart_table.get("angles")
+                angles_uart = self.uart_table.get("angles")
                 calibration_quaternions = self.uart_table.get("calibration_quaternions")
-                if angles and len(angles)== 10  and len(calibration_quaternions) == 10 and self.initok:
+                if angles_uart and len(angles_uart)== 10  and len(calibration_quaternions) == 10 and self.initok:
                     if self.debug == 50:
-                        print(angles)
+                        print(angles_uart)
                         print('')
                         self.debug = 0
                     else:
                         self.debug+=1
-                    angles_update = updateAngles(angles, calibration_quaternions)
+                    angles_update = updateAngles(angles_uart, calibration_quaternions)
                     if angles_update:
-                        angles = angles_update
-                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                            if sum(sum(angles[joint])) != 3:#排除掉突然闪出的1000
-                                self.joint_map[joint] = angles[joint]
+                        angles_temp = angles_update
+                        for joint, quat in zip(self.joints_to_assign, angles_temp):#赋值10个需要更改的关节
+                            if sum(sum(angles_temp[joint])) != 3:#排除掉突然闪出的1000
+                                self.joint_map[joint] = angles_temp[joint]
                     else:
-                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                            self.joint_map[joint] = angles[joint]
+                        print("uart数据异常")
+                        continue
                     joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
                     for idx, joint in enumerate(self.joint_map):
                         joint_matrices[idx] = self.joint_map[joint]

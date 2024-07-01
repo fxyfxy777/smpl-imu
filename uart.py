@@ -217,9 +217,9 @@ class UARTTable:
                 if self.i == 301:
                     self.data_table['angles'] = angles
                     self.data_table['calibration_quaternions'] = self.calibration_quaternions
-                    abs_matrix = np.abs(angles)  # 取绝对值
-                    if np.any(abs_matrix > 1):
-                        print(f"Invalid quaternion: {angles} 大于 1")
+                    # abs_matrix = np.abs(angles)  # 取绝对值
+                    # if np.any(abs_matrix > 1):
+                    #     print(f"Invalid quaternion: {angles} 大于 1")
 
                 else:
                     self.data_table['angles'] = None
@@ -253,7 +253,7 @@ class UARTTable:
 if __name__ == "__main__":
     
     FPS = 60
-    port = 'COM9'  # 指定串口号，根据实际情况修改
+    port = 'COM6'  # 指定串口号，根据实际情况修改
     baudrate = 256000  # 波特率，根据实际情况修改
     port_wit = 'COM18'
     baudrate_wit = 9600  # 波特率，根据实际情况修改
