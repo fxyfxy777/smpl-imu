@@ -7,6 +7,7 @@ import numpy as np
 from utils import quaternion_to_rotation_matrix
 from uart import UARTTable
 import traceback
+import chumpy
 # scene = bpy.context.scene
 # # 获取 'Armature' 骨骼对象
 # armature = bpy.data.objects["骨架"]
