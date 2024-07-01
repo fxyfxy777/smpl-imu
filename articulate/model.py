@@ -11,6 +11,7 @@ import pickle
 import torch
 import numpy as np
 from . import math as M
+import chumpy
 
 
 class ParametricModel:

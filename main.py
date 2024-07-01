@@ -6,6 +6,7 @@ import articulate as art
 import numpy as np
 from utils import quaternion_to_rotation_matrix
 from uart import UARTTable
+import traceback
 # scene = bpy.context.scene
 # # 获取 'Armature' 骨骼对象
 # armature = bpy.data.objects["骨架"]
@@ -57,24 +58,48 @@ def setBoneRotation(bone, rotation):
         bone.rotation_quaternion[2] = y
         bone.rotation_quaternion[3] = z
 
+def xyz_exchange(array):
+    t = array[2]
+    array[2] = array[3]
+    array[3] = t
+
+    t = array[1]
+    array[1] = array[3]
+    array[3] = t
+    return array
 
 def updateAngles(angles, calibration_quaternions ):
+    abs_matrix = np.abs(angles)  # 取绝对值
+    if np.any(abs_matrix > 1):
+        print(f"Invalid quaternion: {angles} 大于 1")
+        return 0
+
     # print("angles, calibration_quaternions: ",angles, calibration_quaternions )
     calibrated_angles = []
     for i, angle in enumerate(angles):
         calibrated_angle = quaternion_multiply(calibration_quaternions[i], angle)
         calibrated_angles.append(calibrated_angle)
 #    print("calibrated_angles",calibrated_angles)
-    lowerarmR_out = calibrated_angles[0]
-    upperarmR_out = calibrated_angles[1]
-    lowerarmL_out = calibrated_angles[2]
-    upperarmL_out = calibrated_angles[3]
+    upperarmR_out = calibrated_angles[0]
+    lowerarmR_out = calibrated_angles[1]
+    upperarmL_out = calibrated_angles[2]
+    lowerarmL_out = calibrated_angles[3]
     trunk_out = calibrated_angles[4]
     upperLegR_out = calibrated_angles[5]
     lowerLegR_out = calibrated_angles[6]
     upperLegL_out = calibrated_angles[7]
     lowerLegL_out = calibrated_angles[8]
     head_out = calibrated_angles[9]
+    # lowerarmR_out = calibrated_angles[0]
+    # upperarmR_out = calibrated_angles[1]
+    # lowerarmL_out = calibrated_angles[2]
+    # upperarmL_out = calibrated_angles[3]
+    # trunk_out = calibrated_angles[4]
+    # upperLegR_out = calibrated_angles[5]
+    # lowerLegR_out = calibrated_angles[6]
+    # upperLegL_out = calibrated_angles[7]
+    # lowerLegL_out = calibrated_angles[8]
+    # head_out = calibrated_angles[9]
     
     trunk_inv = trunk_out * np.array([1, -1, -1, -1])
     head_rel = multiplyQuaternion(trunk_inv, head_out)
@@ -83,27 +108,22 @@ def updateAngles(angles, calibration_quaternions ):
     upperarmL_inv = upperarmL_out * np.array([1, -1, -1, -1])
     lowerarmL_rel = multiplyQuaternion(upperarmL_inv, lowerarmL_out)
     upperLegR_inv = upperLegR_out * np.array([1, -1, -1, -1])
-    lowerLegR_rel = multiplyQuaternion(upperLegR_inv, lowerLegR_out)
+    lowerLegR_rel = multiplyQuaternion(upperLegR_inv, lowerLegR_out) * np.array([1, -1, -1, 1])
     upperLegL_inv = upperLegL_out * np.array([1, -1, -1, -1])
-    lowerLegL_rel = multiplyQuaternion(upperLegL_inv, lowerLegL_out)
-    joints_to_assign = ["RSHOULDER", "RELBOW", "LSHOULDER", "LELBOW", "SPINE", "RHIP", "RKNEE", "LHIP", "LKNEE", "HEAD"]
+    lowerLegL_rel = multiplyQuaternion(upperLegL_inv, lowerLegL_out) * np.array([1, -1, -1, 1])
+
     angles = {}
-    # for name in joints_to_assign:
-    #     angles['name'] = 
-    # angles = (upperarmR_out,lowerarmR_rel,upperarmL_out,lowerarmL_rel,trunk_out,upperLegR_out,lowerLegR_rel,upperLegL_out,lowerLegL_rel,head_rel)
-    
-#    print("bonebonebone",lowerarmR_rel,upperarmR_out)
         
-    angles['RSHOULDER'] = quaternion_to_rotation_matrix(upperarmR_out)
-    angles['RELBOW'] = quaternion_to_rotation_matrix(lowerarmR_rel)
-    angles['LSHOULDER'] = quaternion_to_rotation_matrix(upperarmL_out)
-    angles['LELBOW'] = quaternion_to_rotation_matrix(lowerarmL_rel)
+    angles['RSHOULDER'] = quaternion_to_rotation_matrix(xyz_exchange(upperarmR_out))
+    angles['RELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmR_rel) * np.array([1, -1, 1, -1]) ) 
+    angles['LSHOULDER'] = quaternion_to_rotation_matrix(xyz_exchange(upperarmL_out))
+    angles['LELBOW'] = quaternion_to_rotation_matrix(xyz_exchange(lowerarmL_rel))
 
     angles['SPINE'] = quaternion_to_rotation_matrix(trunk_out)
 
-    angles['RHIP'] = quaternion_to_rotation_matrix(upperLegR_out)
+    angles['RHIP'] = quaternion_to_rotation_matrix(upperLegR_out * np.array([1, -1, -1, 1]) )
     angles['RKNEE'] = quaternion_to_rotation_matrix(lowerLegR_rel)
-    angles['LHIP'] = quaternion_to_rotation_matrix(upperLegL_out)
+    angles['LHIP'] = quaternion_to_rotation_matrix(upperLegL_out * np.array([1, -1, -1, 1]) )
     angles['LKNEE'] = quaternion_to_rotation_matrix(lowerLegL_rel)
 
     angles['HEAD'] = quaternion_to_rotation_matrix(head_rel)
@@ -113,15 +133,22 @@ class SMPL_display():
     def __init__(self) -> None:
         self.model = art.ParametricModel("smpl_model/basicModel_f_lbs_10_207_0_v1.0.0.pkl")
         FPS = 60
-        port = 'COM9'  # 指定串口号，根据实际情况修改
+        print("请输入port:")
+        port = input()
+        if not port:
+            port = 'COM9'  # 指定串口号，根据实际情况修改
         baudrate = 256000  # 波特率，根据实际情况修改
-        port_wit = 'COM15'
+        print("请输入port_wit:")
+        port_wit = input()
+        if not port_wit:
+            port_wit = 'COM18'
         baudrate_wit = 9600  # 波特率，根据实际情况修改
         self.uart_table = UARTTable(port=port, baudrate=baudrate, port_wit = port_wit,baudrate_wit = baudrate_wit)
         self.uart_table.startThreaded()
         # 定义四元数 (1, 0, 0, 0)
         # rotation_matrix = np.eye(3).reshape(1, 3, 3).repeat(24, axis=0)
         rotation_matrix = np.eye(3).reshape(1, 3, 3)
+        self.debug = 1
 
         # 定义24个关节名称
         joints = [
@@ -148,14 +175,19 @@ class SMPL_display():
                 angles = self.uart_table.get("angles")
                 calibration_quaternions = self.uart_table.get("calibration_quaternions")
                 if angles and len(angles)== 10  and len(calibration_quaternions) == 10 :
-                    angles = updateAngles(angles, calibration_quaternions)
-                    for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                        self.joint_map[joint] = angles[joint]
+                    angles_update = updateAngles(angles, calibration_quaternions)
+                    if angles_update != 0:
+                        angles = angles_update
+                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
+                            self.joint_map[joint] = angles[joint]
+                    else:
+                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
+                            self.joint_map[joint] = angles[joint]
 
-                    joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
-                    for idx, joint in enumerate(self.joint_map):
-                        joint_matrices[idx] = self.joint_map[joint][0]
-                    rotation_matrix_seq[i] = joint_matrices
+                        joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
+                        for idx, joint in enumerate(self.joint_map):
+                            joint_matrices[idx] = self.joint_map[joint][0]
+                        rotation_matrix_seq[i] = joint_matrices
                 else:
                     time.sleep(1)
                     print("初始化中...")
@@ -169,25 +201,40 @@ class SMPL_display():
             
     
     def smpl_model_realtime(self):
+        angles_temp = None
        
         while 1:
-            angles = self.uart_table.get("angles")
-            calibration_quaternions = self.uart_table.get("calibration_quaternions")
-            if angles and len(angles)== 10  and len(calibration_quaternions) == 10 and self.initok:
-                angles = updateAngles(angles, calibration_quaternions)
-                for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
-                    self.joint_map[joint] = angles[joint]
-
-                joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
-                for idx, joint in enumerate(self.joint_map):
-                    joint_matrices[idx] = self.joint_map[joint]
-                joint_matrices = torch.from_numpy(joint_matrices).float()
-                self.model.view_motion_while_display([joint_matrices])
-            else:
-                if not self.initok:
-                    time.sleep(1)
-                    print("初始化失败！")
-                pass
+            try:
+                angles = self.uart_table.get("angles")
+                calibration_quaternions = self.uart_table.get("calibration_quaternions")
+                if angles and len(angles)== 10  and len(calibration_quaternions) == 10 and self.initok:
+                    if self.debug == 50:
+                        print(angles)
+                        print('')
+                        self.debug = 0
+                    else:
+                        self.debug+=1
+                    angles_update = updateAngles(angles, calibration_quaternions)
+                    if angles_update:
+                        angles = angles_update
+                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
+                            if sum(sum(angles[joint])) != 3:#排除掉突然闪出的1000
+                                self.joint_map[joint] = angles[joint]
+                    else:
+                        for joint, quat in zip(self.joints_to_assign, angles):#赋值10个需要更改的关节
+                            self.joint_map[joint] = angles[joint]
+                    joint_matrices = np.zeros((24, 3, 3))#将24关节的数据存起来
+                    for idx, joint in enumerate(self.joint_map):
+                        joint_matrices[idx] = self.joint_map[joint]
+                    joint_matrices = torch.from_numpy(joint_matrices).float()
+                    self.model.view_motion_while_display([joint_matrices])
+                else:
+                    if not self.initok:
+                        time.sleep(1)
+                        print("初始化失败！")
+                    pass
+            except:
+                traceback.print_exc()
 
 
 if __name__ == "__main__":
